@@ -3,10 +3,12 @@
 namespace EmailService\Http\Controllers;
 
 use EmailService\Email;
+use EmailService\Message;
 use Illuminate\Http\Request;
-use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
+use PHPMailer\PHPMailer\PHPMailer;
+use Illuminate\Support\Facades\Log;
 
 
 class EmailService
@@ -14,7 +16,7 @@ class EmailService
     protected $mail;
     protected $log;
 
-    public function __construct(Email $log)
+    public function __construct(Email $log, Message $msg)
     {
         $this->log = $log;    
     }
@@ -43,6 +45,9 @@ class EmailService
         elseif ($from === env('MAIL_4_SENDER')) {
             $password = 'MAIL_4_PASSWORD';
         }
+        elseif ($from === env('MAIL_5_SENDER')) {
+            $password = 'MAIL_5_PASSWORD';
+        }
         $mail->Password   = env($password);
         $mail->SMTPSecure = "ssl";
         $mail->setFrom($from,$namefrom);
@@ -58,10 +63,10 @@ class EmailService
 
     public function send(Request $request)
     {
-        $mail = $this->sendmail($request->from['email'],$request->from['name'], $request->to['email'],$request->to['name'],$request->subject,$request->message,$request->message);
+        $mail = $this->createMessage($request->from['email'],$request->from['name'], $request->to['email'], $request->to['name'], $request->subject, $request->message);
         
         if (!$mail) {
-            return $this->createResponse($request->to['email'], $request->from['email'], '400', 'Error sending');
+            return $this->createMessage($request->to['email'], $request->from['email'], '400', 'Error sending');
         }
 
         return $this->createResponse($request->to['email'], $request->from['email'], '200', 'Mail sent successfully');
@@ -74,6 +79,21 @@ class EmailService
             'from' => $from,
             'response' => $response,
             'response_code' => $code
+        ]);
+
+        return response()->json(['status_code' => $code, 'message' => $response]);
+    }
+
+    public function createMessage($from, $nameFrom, $to,$nameto,$subject,$message)
+    {
+        $this->log->create([
+            'to' => $to,
+            'nameTo' => $nameTo,
+            'from' => $from,
+            'nameFrom' => $nameFrom,
+            'subject' => $subject,
+            'message' => $message,
+            'status' => false
         ]);
 
         return response()->json(['status_code' => $code, 'message' => $response]);
