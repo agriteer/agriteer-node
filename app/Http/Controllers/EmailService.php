@@ -11,17 +11,39 @@ use PHPMailer\PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\Log;
 
 
-class EmailService
+class EmailService 
 {
-    protected $mail;
-    protected $log;
+    protected $msg;
 
-    public function __construct(Email $log, Message $msg)
+    public function __construct(Message $msg)
     {
-        $this->log = $log;    
+        $this->log = $msg;    
     }
 
-    public function sendmail($from, $nameFrom, $to,$nameto,$subject,$message,$altmess)  {
+    public function contact(Request $req)
+    {
+        $body = [
+            'from' => [ 'email' => 'test_mail@agriteer.com', 'name' => 'Agriteer Support' ],
+            'to' => [ 'email' => $req->email, 'name' => $req->name ],
+            'subject' => 'Re: ' . $req->subject,
+            'message' => "<div><p>Thanks for contacting Agriteer ". $req->name ."</p><p>Due to an increase in support volume, it may take longer than usual for our team to reply. We apologize for any inconvenience, and will get back to you as soon as we can.</p><p>If you'd like send more information, kindly reply to this email.</p><p>Agriteer Team</p></div>"
+        ];
+
+        $body2 = [
+            'from' => [ 'email' => 'test_mail@agriteer.com', 'name' => 'Contact Form' ],
+            'to' => [ 'email' => 'support@agriteer.com', 'name' => $req->name ],
+            'subject' => $req->subject,
+            'message' => "<div><p><strong>Name: </strong>".$req->name."</p><p><strong>Email: </strong>".$req->email."</p><p><strong>Subject: </strong>".$req->subject."</p><p><strong>Message: </strong>". $req->message ."</p></div>"
+        ];
+
+        $send = $this->send($body);
+        $send = $this->send($body2);
+        
+        return response()->json($send);
+    }
+
+    public function sendmail($from, $nameFrom, $to,$nameto,$subject,$message)
+    {
         $password = '';
         $from  = $from; 
         $namefrom = $nameFrom;
@@ -51,51 +73,49 @@ class EmailService
         $mail->Password   = env($password);
         $mail->SMTPSecure = "ssl";
         $mail->setFrom($from,$namefrom);
-        $mail->addCC($from,$namefrom);
         $mail->Subject  = $subject;
         $mail->isHTML();
         $mail->Body = $message;
-        $mail->AltBody  = $altmess;
+        $mail->AltBody  = $message;
         $mail->addAddress($to, $nameto);
 
-        return $mail->send();
+        $mail->send();
     }
 
-    public function send(Request $request)
+    public function send($request)
     {
-        $mail = $this->createMessage($request->from['email'],$request->from['name'], $request->to['email'], $request->to['name'], $request->subject, $request->message);
+        $mail = $this->sendmail(
+            $request['from']['email'],
+            $request['from']['name'],
+            $request['to']['email'],
+            $request['to']['name'],
+            $request['subject'],
+            $request['message']
+        );
         
         if (!$mail) {
-            return $this->createMessage($request->to['email'], $request->from['email'], '400', 'Error sending');
+            return $this->createMessage($request, false);
         }
 
-        return $this->createResponse($request->to['email'], $request->from['email'], '200', 'Mail sent successfully');
+        return $this->createMessage($request, true);
     }
 
-    public function createResponse($to, $from, $code, $response)
+    public function createMessage($request, $status = true)
     {
-        $this->log->create([
-            'to' => $to,
-            'from' => $from,
-            'response' => $response,
-            'response_code' => $code
-        ]);
+        $data = [
+            'to' => $request['to']['email'],
+            'nameTo' => $request['to']['name'],
+            'from' => $request['from']['name'],
+            'nameFrom' => $request['from']['name'],
+            'subject' => $request['subject'],
+            'message' => $request['message'],
+            'status' => $status
+        ];
 
-        return response()->json(['status_code' => $code, 'message' => $response]);
-    }
+        $this->log->create($data);
 
-    public function createMessage($from, $nameFrom, $to,$nameto,$subject,$message)
-    {
-        $this->log->create([
-            'to' => $to,
-            'nameTo' => $nameTo,
-            'from' => $from,
-            'nameFrom' => $nameFrom,
-            'subject' => $subject,
-            'message' => $message,
-            'status' => false
-        ]);
+        $response = ($status === false) ? 'Error saving email' : 'Message successfully sent';
 
-        return response()->json(['status_code' => $code, 'message' => $response]);
+        return ['status_code' => 200, 'message' => $response];
     }
 }
